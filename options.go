@@ -13,23 +13,23 @@ type logger interface {
 	Println(v ...interface{})
 }
 
-// WithHttpClient set custom http client
-func WithHttpClient(client httpClient) func(rpc *EthRPC) {
-	return func(rpc *EthRPC) {
-		rpc.client = client
+// WithHTTPClient set custom http client
+func WithHTTPClient(clt httpClient) func(client *Client) {
+	return func(client *Client) {
+		client.httpClient = clt
 	}
 }
 
 // WithLogger set custom logger
-func WithLogger(l logger) func(rpc *EthRPC) {
-	return func(rpc *EthRPC) {
-		rpc.log = l
+func WithLogger(l logger) func(client *Client) {
+	return func(client *Client) {
+		client.log = l
 	}
 }
 
 // WithDebug set debug flag
-func WithDebug(enabled bool) func(rpc *EthRPC) {
-	return func(rpc *EthRPC) {
-		rpc.Debug = enabled
+func WithDebug(enabled bool) func(client *Client) {
+	return func(client *Client) {
+		client.Debug = enabled
 	}
 }

@@ -17,13 +17,13 @@ import (
 
 type EthRPCTestSuite struct {
 	suite.Suite
-	rpc *EthRPC
+	client *Client
 }
 
 func (s *EthRPCTestSuite) registerResponse(result string, callback func([]byte)) {
 	httpmock.Reset()
 	response := fmt.Sprintf(`{"jsonrpc":"2.0", "id":1, "result": %s}`, result)
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		callback(s.getBody(request))
 		return httpmock.NewStringResponse(200, response), nil
 	})
@@ -31,7 +31,7 @@ func (s *EthRPCTestSuite) registerResponse(result string, callback func([]byte))
 
 func (s *EthRPCTestSuite) registerResponseError(err error) {
 	httpmock.Reset()
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		return nil, err
 	})
 }
@@ -60,7 +60,7 @@ func (s *EthRPCTestSuite) paramsEqual(body []byte, expected string) {
 }
 
 func (s *EthRPCTestSuite) SetupSuite() {
-	s.rpc = NewEthRPC("http://127.0.0.1:8545", WithHttpClient(http.DefaultClient), WithLogger(nil), WithDebug(false))
+	s.client = NewClient("http://127.0.0.1:8545", WithHTTPClient(http.DefaultClient), WithLogger(nil), WithDebug(false))
 
 	httpmock.Activate()
 }
@@ -76,7 +76,7 @@ func (s *EthRPCTestSuite) TearDownTest() {
 func (s *EthRPCTestSuite) TestWeb3ClientVersion() {
 	response := `{"jsonrpc":"2.0", "id":1, "result": "test client"}`
 
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		body := s.getBody(request)
 		s.methodEqual(body, "web3_clientVersion")
 		s.paramsEqual(body, `null`)
@@ -84,34 +84,34 @@ func (s *EthRPCTestSuite) TestWeb3ClientVersion() {
 		return httpmock.NewStringResponse(200, response), nil
 	})
 
-	v, err := s.rpc.Web3ClientVersion()
+	v, err := s.client.Web3.ClientVersion()
 	s.Require().Nil(err)
 	s.Require().Equal("test client", v)
 }
 
 func (s *EthRPCTestSuite) TestCall() {
 	// Test http error
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		return nil, errors.New("Error")
 	})
 
-	_, err := s.rpc.Call("test")
+	_, err := s.client.Call("test")
 	s.Require().NotNil(err)
 	httpmock.Reset()
 
 	// Test invalid response format
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		return httpmock.NewStringResponse(200, "{213"), nil
 	})
-	_, err = s.rpc.Call("test")
+	_, err = s.client.Call("test")
 	s.Require().NotNil(err)
 	httpmock.Reset()
 
 	// Test eth error
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		return httpmock.NewStringResponse(200, `{"error": {"code": 21, "message": "eee"}}`), nil
 	})
-	_, err = s.rpc.Call("test")
+	_, err = s.client.Call("test")
 	s.Require().NotNil(err)
 	ethError, ok := err.(EthError)
 	s.Require().True(ok)
@@ -121,27 +121,27 @@ func (s *EthRPCTestSuite) TestCall() {
 
 func (s *EthRPCTestSuite) Test_call() {
 	// Test http error
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("Error")
 	})
-	err := s.rpc.call("test", nil)
+	err := s.client.call("test", nil)
 	s.Require().NotNil(err)
 
 	// Test target is nil
 	s.registerResponse(`{"foo": "bar"}`, func([]byte) {})
-	err = s.rpc.call("test", nil)
+	err = s.client.call("test", nil)
 	s.Require().Nil(err)
 
 	// Test invalid target
 	target := ""
-	err = s.rpc.call("test", &target)
+	err = s.client.call("test", &target)
 	s.Require().NotNil(err)
 }
 
 func (s *EthRPCTestSuite) TestWeb3Sha3() {
 	response := `{"jsonrpc":"2.0", "id":1, "result": "sha3result"}`
 
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		body := s.getBody(request)
 		s.methodEqual(body, "web3_sha3")
 		s.paramsEqual(body, `["0x64617461"]`)
@@ -149,7 +149,7 @@ func (s *EthRPCTestSuite) TestWeb3Sha3() {
 		return httpmock.NewStringResponse(200, response), nil
 	})
 
-	result, err := s.rpc.Web3Sha3([]byte("data"))
+	result, err := s.client.Web3.Sha3([]byte("data"))
 	s.Require().Nil(err)
 	s.Require().Equal("sha3result", result)
 }
@@ -157,7 +157,7 @@ func (s *EthRPCTestSuite) TestWeb3Sha3() {
 func (s *EthRPCTestSuite) TestNetVersion() {
 	response := `{"jsonrpc":"2.0", "id":1, "result": "v2b3"}`
 
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		body := s.getBody(request)
 		s.methodEqual(body, "net_version")
 		s.paramsEqual(body, "null")
@@ -165,14 +165,14 @@ func (s *EthRPCTestSuite) TestNetVersion() {
 		return httpmock.NewStringResponse(200, response), nil
 	})
 
-	v, err := s.rpc.NetVersion()
+	v, err := s.client.Net.Version()
 	s.Require().Nil(err)
 	s.Require().Equal("v2b3", v)
 }
 
 func (s *EthRPCTestSuite) TestNetListening() {
 	response := `{"jsonrpc":"2.0", "id":1, "result": true}`
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		body := s.getBody(request)
 		s.methodEqual(body, "net_listening")
 		s.paramsEqual(body, "null")
@@ -180,13 +180,13 @@ func (s *EthRPCTestSuite) TestNetListening() {
 		return httpmock.NewStringResponse(200, response), nil
 	})
 
-	listening, err := s.rpc.NetListening()
+	listening, err := s.client.Net.Listening()
 	s.Require().Nil(err)
 	s.Require().True(listening)
 
 	httpmock.Reset()
 	response = `{"jsonrpc":"2.0", "id":1, "result": false}`
-	httpmock.RegisterResponder("POST", s.rpc.url, func(request *http.Request) (*http.Response, error) {
+	httpmock.RegisterResponder("POST", s.client.endpoint, func(request *http.Request) (*http.Response, error) {
 		body := s.getBody(request)
 		s.methodEqual(body, "net_listening")
 		s.paramsEqual(body, "null")
@@ -194,7 +194,7 @@ func (s *EthRPCTestSuite) TestNetListening() {
 		return httpmock.NewStringResponse(200, response), nil
 	})
 
-	listening, err = s.rpc.NetListening()
+	listening, err = s.client.Net.Listening()
 	s.Require().Nil(err)
 	s.Require().False(listening)
 }
@@ -202,7 +202,7 @@ func (s *EthRPCTestSuite) TestNetListening() {
 func (s *EthRPCTestSuite) TestNetPeerCount() {
 	// Test error
 	s.registerResponseError(errors.New("Error"))
-	peerCount, err := s.rpc.NetPeerCount()
+	peerCount, err := s.client.Net.PeerCount()
 	s.Require().NotNil(err)
 	s.Require().Equal(0, peerCount)
 
@@ -212,7 +212,7 @@ func (s *EthRPCTestSuite) TestNetPeerCount() {
 		s.paramsEqual(body, "null")
 	})
 
-	peerCount, err = s.rpc.NetPeerCount()
+	peerCount, err = s.client.Net.PeerCount()
 	s.Require().Nil(err)
 	s.Require().Equal(34, peerCount)
 }
@@ -223,14 +223,14 @@ func (s *EthRPCTestSuite) TestEthProtocolVersion() {
 		s.paramsEqual(body, "null")
 	})
 
-	protocolVersion, err := s.rpc.EthProtocolVersion()
+	protocolVersion, err := s.client.Eth.ProtocolVersion()
 	s.Require().Nil(err)
 	s.Require().Equal("54", protocolVersion)
 }
 
 func (s *EthRPCTestSuite) TestEthSyncing() {
 	s.registerResponseError(errors.New("Error"))
-	syncing, err := s.rpc.EthSyncing()
+	syncing, err := s.client.Eth.Syncing()
 	s.Require().NotNil(err)
 
 	expected := &Syncing{
@@ -242,7 +242,7 @@ func (s *EthRPCTestSuite) TestEthSyncing() {
 	s.registerResponse(`false`, func(body []byte) {
 		s.methodEqual(body, "eth_syncing")
 	})
-	syncing, err = s.rpc.EthSyncing()
+	syncing, err = s.client.Eth.Syncing()
 
 	s.Require().Nil(err)
 	s.Require().Equal(expected, syncing)
@@ -260,7 +260,7 @@ func (s *EthRPCTestSuite) TestEthSyncing() {
 		HighestBlock:  637755,
 		StartingBlock: 0,
 	}
-	syncing, err = s.rpc.EthSyncing()
+	syncing, err = s.client.Eth.Syncing()
 	s.Require().Nil(err)
 	s.Require().Equal(expected, syncing)
 }
@@ -271,7 +271,7 @@ func (s *EthRPCTestSuite) TestEthCoinbase() {
 		s.paramsEqual(body, "null")
 	})
 
-	address, err := s.rpc.EthCoinbase()
+	address, err := s.client.Eth.Coinbase()
 	s.Require().Nil(err)
 	s.Require().Equal("0x407d73d8a49eeb85d32cf465507dd71d507100c1", address)
 }
@@ -281,21 +281,21 @@ func (s *EthRPCTestSuite) TestEthMining() {
 		s.paramsEqual(body, "null")
 	})
 
-	mining, err := s.rpc.EthMining()
+	mining, err := s.client.Eth.Mining()
 	s.Require().Nil(err)
 	s.Require().True(mining)
 
 	httpmock.Reset()
 	s.registerResponse(`false`, func(body []byte) {})
 
-	mining, err = s.rpc.EthMining()
+	mining, err = s.client.Eth.Mining()
 	s.Require().Nil(err)
 	s.Require().False(mining)
 }
 
 func (s *EthRPCTestSuite) TestEthHashrate() {
 	s.registerResponseError(errors.New("Error"))
-	hashrate, err := s.rpc.EthHashrate()
+	hashrate, err := s.client.Eth.Hashrate()
 	s.Require().NotNil(err)
 
 	s.registerResponse(`"0x38a"`, func(body []byte) {
@@ -303,14 +303,14 @@ func (s *EthRPCTestSuite) TestEthHashrate() {
 		s.paramsEqual(body, "null")
 	})
 
-	hashrate, err = s.rpc.EthHashrate()
+	hashrate, err = s.client.Eth.Hashrate()
 	s.Require().Nil(err)
 	s.Require().Equal(906, hashrate)
 }
 
 func (s *EthRPCTestSuite) TestEthGasPrice() {
 	s.registerResponseError(errors.New("Error"))
-	gasPrice, err := s.rpc.EthGasPrice()
+	gasPrice, err := s.client.Eth.GasPrice()
 	s.Require().NotNil(err)
 
 	s.registerResponse(`"0x09184e72a000"`, func(body []byte) {
@@ -319,7 +319,7 @@ func (s *EthRPCTestSuite) TestEthGasPrice() {
 	})
 
 	expected, _ := big.NewInt(0).SetString("09184e72a000", 16)
-	gasPrice, err = s.rpc.EthGasPrice()
+	gasPrice, err = s.client.Eth.GasPrice()
 	s.Require().Nil(err)
 	s.Require().Equal(*expected, gasPrice)
 }
@@ -330,14 +330,14 @@ func (s *EthRPCTestSuite) TestEthAccounts() {
 		s.paramsEqual(body, "null")
 	})
 
-	accounts, err := s.rpc.EthAccounts()
+	accounts, err := s.client.Eth.Accounts()
 	s.Require().Nil(err)
 	s.Require().Equal([]string{"0x407d73d8a49eeb85d32cf465507dd71d507100c1"}, accounts)
 }
 
 func (s *EthRPCTestSuite) TestEthBlockNumber() {
 	s.registerResponseError(errors.New("Error"))
-	blockBumber, err := s.rpc.EthBlockNumber()
+	blockBumber, err := s.client.Eth.BlockNumber()
 	s.Require().NotNil(err)
 
 	s.registerResponse(`"0x37eb38"`, func(body []byte) {
@@ -345,7 +345,7 @@ func (s *EthRPCTestSuite) TestEthBlockNumber() {
 		s.paramsEqual(body, "null")
 	})
 
-	blockBumber, err = s.rpc.EthBlockNumber()
+	blockBumber, err = s.client.Eth.BlockNumber()
 	s.Require().Nil(err)
 	s.Require().Equal(3664696, blockBumber)
 }
@@ -353,7 +353,7 @@ func (s *EthRPCTestSuite) TestEthBlockNumber() {
 func (s *EthRPCTestSuite) TestEthGetBalance() {
 	address := "0x407d73d8a49eeb85d32cf465507dd71d507100c1"
 	s.registerResponseError(errors.New("Error"))
-	balance, err := s.rpc.EthGetBalance(address, "latest")
+	balance, err := s.client.Eth.GetBalance(address, "latest")
 	s.Require().NotNil(err)
 
 	s.registerResponse(`"0x486d06b0d08d05909c4"`, func(body []byte) {
@@ -362,7 +362,7 @@ func (s *EthRPCTestSuite) TestEthGetBalance() {
 	})
 
 	expected, _ := big.NewInt(0).SetString("21376347749069564217796", 10)
-	balance, err = s.rpc.EthGetBalance(address, "latest")
+	balance, err = s.client.Eth.GetBalance(address, "latest")
 	s.Require().Nil(err)
 	s.Require().Equal(*expected, balance)
 }
@@ -377,7 +377,7 @@ func (s *EthRPCTestSuite) TestEthGetStorageAt() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s", "0x21", "pending"]`, data))
 	})
 
-	result, err := s.rpc.EthGetStorageAt(data, position, tag)
+	result, err := s.client.Eth.GetStorageAt(data, position, tag)
 	s.Require().Nil(err)
 	s.Require().Equal("0x00000000000000000000000000000000000000000000000000000000000004d2", result)
 }
@@ -385,7 +385,7 @@ func (s *EthRPCTestSuite) TestEthGetStorageAt() {
 func (s *EthRPCTestSuite) TestEthGetTransactionCount() {
 	address := "0x407d73d8a49eeb85d32cf465507dd71d507100c1"
 	s.registerResponseError(errors.New("Error"))
-	count, err := s.rpc.EthGetTransactionCount(address, "latest")
+	count, err := s.client.Eth.GetTransactionCount(address, "latest")
 	s.Require().NotNil(err)
 
 	s.registerResponse(`"0x10"`, func(body []byte) {
@@ -393,7 +393,7 @@ func (s *EthRPCTestSuite) TestEthGetTransactionCount() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s", "latest"]`, address))
 	})
 
-	count, err = s.rpc.EthGetTransactionCount(address, "latest")
+	count, err = s.client.Eth.GetTransactionCount(address, "latest")
 	s.Require().Nil(err)
 	s.Require().Equal(16, count)
 }
@@ -401,7 +401,7 @@ func (s *EthRPCTestSuite) TestEthGetTransactionCount() {
 func (s *EthRPCTestSuite) TestEthGetBlockTransactionCountByHash() {
 	hash := "0xb903239f8543d04b5dc1ba6579132b143087c68db1b2168786408fcbce568238"
 	s.registerResponseError(errors.New("Error"))
-	count, err := s.rpc.EthGetBlockTransactionCountByHash(hash)
+	count, err := s.client.Eth.GetBlockTransactionCountByHash(hash)
 	s.Require().NotNil(err)
 
 	s.registerResponse(`"0xb"`, func(body []byte) {
@@ -409,7 +409,7 @@ func (s *EthRPCTestSuite) TestEthGetBlockTransactionCountByHash() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s"]`, hash))
 	})
 
-	count, err = s.rpc.EthGetBlockTransactionCountByHash(hash)
+	count, err = s.client.Eth.GetBlockTransactionCountByHash(hash)
 	s.Require().Nil(err)
 	s.Require().Equal(11, count)
 }
@@ -417,7 +417,7 @@ func (s *EthRPCTestSuite) TestEthGetBlockTransactionCountByHash() {
 func (s *EthRPCTestSuite) TestEthGetBlockTransactionCountByNumber() {
 	number := 2384732
 	s.registerResponseError(errors.New("Error"))
-	count, err := s.rpc.EthGetBlockTransactionCountByNumber(number)
+	count, err := s.client.Eth.GetBlockTransactionCountByNumber(number)
 	s.Require().NotNil(err)
 
 	s.registerResponse(`"0xe8"`, func(body []byte) {
@@ -425,7 +425,7 @@ func (s *EthRPCTestSuite) TestEthGetBlockTransactionCountByNumber() {
 		s.paramsEqual(body, `["0x24635c"]`)
 	})
 
-	count, err = s.rpc.EthGetBlockTransactionCountByNumber(number)
+	count, err = s.client.Eth.GetBlockTransactionCountByNumber(number)
 	s.Require().Nil(err)
 	s.Require().Equal(232, count)
 }
@@ -433,7 +433,7 @@ func (s *EthRPCTestSuite) TestEthGetBlockTransactionCountByNumber() {
 func (s *EthRPCTestSuite) TestEthGetUncleCountByBlockHash() {
 	hash := "0xb903239f8543d04b5dc1ba6579132b143087c68db1b2168786408fcbce568238"
 	s.registerResponseError(errors.New("Error"))
-	count, err := s.rpc.EthGetUncleCountByBlockHash(hash)
+	count, err := s.client.Eth.GetUncleCountByBlockHash(hash)
 	s.Require().NotNil(err)
 
 	s.registerResponse(`"0xa"`, func(body []byte) {
@@ -441,7 +441,7 @@ func (s *EthRPCTestSuite) TestEthGetUncleCountByBlockHash() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s"]`, hash))
 	})
 
-	count, err = s.rpc.EthGetUncleCountByBlockHash(hash)
+	count, err = s.client.Eth.GetUncleCountByBlockHash(hash)
 	s.Require().Nil(err)
 	s.Require().Equal(10, count)
 }
@@ -449,7 +449,7 @@ func (s *EthRPCTestSuite) TestEthGetUncleCountByBlockHash() {
 func (s *EthRPCTestSuite) TestEthGetUncleCountByBlockNumber() {
 	number := 3987434
 	s.registerResponseError(errors.New("Error"))
-	count, err := s.rpc.EthGetUncleCountByBlockNumber(number)
+	count, err := s.client.Eth.GetUncleCountByBlockNumber(number)
 	s.Require().NotNil(err)
 
 	s.registerResponse(`"0x386"`, func(body []byte) {
@@ -457,7 +457,7 @@ func (s *EthRPCTestSuite) TestEthGetUncleCountByBlockNumber() {
 		s.paramsEqual(body, `["0x3cd7ea"]`)
 	})
 
-	count, err = s.rpc.EthGetUncleCountByBlockNumber(number)
+	count, err = s.client.Eth.GetUncleCountByBlockNumber(number)
 	s.Require().Nil(err)
 	s.Require().Equal(902, count)
 }
@@ -470,7 +470,7 @@ func (s *EthRPCTestSuite) TestEthGetCode() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s", "latest"]`, address))
 	})
 
-	code, err := s.rpc.EthGetCode(address, "latest")
+	code, err := s.client.Eth.GetCode(address, "latest")
 	s.Require().Nil(err)
 	s.Require().Equal(result, code)
 }
@@ -484,7 +484,7 @@ func (s *EthRPCTestSuite) TestEthSign() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s", "%s"]`, address, data))
 	})
 
-	signed, err := s.rpc.EthSign(address, data)
+	signed, err := s.client.Eth.Sign(address, data)
 	s.Require().Nil(err)
 	s.Require().Equal(result, signed)
 }
@@ -514,7 +514,7 @@ func (s *EthRPCTestSuite) TestSendTransaction() {
 		}]`)
 	})
 
-	txid, err := s.rpc.EthSendTransaction(t)
+	txid, err := s.client.Eth.SendTransaction(t)
 	s.Require().Nil(err)
 	s.Require().Equal(result, txid)
 
@@ -528,7 +528,7 @@ func (s *EthRPCTestSuite) TestSendTransaction() {
 
 	})
 
-	txid, err = s.rpc.EthSendTransaction(t)
+	txid, err = s.client.Eth.SendTransaction(t)
 	s.Require().Nil(err)
 	s.Require().Equal(result, txid)
 }
@@ -541,7 +541,7 @@ func (s *EthRPCTestSuite) TestEthSendRawTransaction() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s"]`, data))
 	})
 
-	txid, err := s.rpc.EthSendRawTransaction(data)
+	txid, err := s.client.Eth.SendRawTransaction(data)
 	s.Require().Nil(err)
 	s.Require().Equal(result, txid)
 }
@@ -552,7 +552,7 @@ func (s *EthRPCTestSuite) TestEthGetCompilers() {
 		s.paramsEqual(body, "null")
 	})
 
-	compilers, err := s.rpc.EthGetCompilers()
+	compilers, err := s.client.Eth.GetCompilers()
 	s.Require().Nil(err)
 	s.Require().Equal([]string{"solidity", "some comp"}, compilers)
 
@@ -560,7 +560,7 @@ func (s *EthRPCTestSuite) TestEthGetCompilers() {
 
 func (s *EthRPCTestSuite) TestGetBlock() {
 	s.registerResponseError(errors.New("Error"))
-	block, err := s.rpc.getBlock("eth_getBlockByHash", true)
+	block, err := s.client.Eth.getBlock("eth_getBlockByHash", true)
 	s.Require().NotNil(err)
 
 	// Test with transactions
@@ -617,7 +617,7 @@ func (s *EthRPCTestSuite) TestGetBlock() {
 		s.methodEqual(body, "eth_getBlockByHash")
 	})
 
-	block, err = s.rpc.getBlock("eth_getBlockByHash", true)
+	block, err = s.client.Eth.getBlock("eth_getBlockByHash", true)
 	s.Require().Nil(err)
 	s.Require().NotNil(block)
 	s.Require().Equal(hash, block.Hash)
@@ -699,7 +699,7 @@ func (s *EthRPCTestSuite) TestGetBlock() {
 		s.methodEqual(body, "eth_getBlockByHash")
 	})
 
-	block, err = s.rpc.getBlock("eth_getBlockByHash", false)
+	block, err = s.client.Eth.getBlock("eth_getBlockByHash", false)
 	s.Require().Nil(err)
 	s.Require().NotNil(block)
 	s.Require().Equal(hash, block.Hash)
@@ -743,7 +743,7 @@ func (s *EthRPCTestSuite) TestEthGetBlockByHash() {
 		s.paramsEqual(body, `["0x111", true]`)
 	})
 
-	_, err := s.rpc.EthGetBlockByHash(hash, true)
+	_, err := s.client.Eth.GetBlockByHash(hash, true)
 	s.Require().Nil(err)
 
 	httpmock.Reset()
@@ -755,7 +755,7 @@ func (s *EthRPCTestSuite) TestEthGetBlockByHash() {
 		s.paramsEqual(body, `["0x222", false]`)
 	})
 
-	_, err = s.rpc.EthGetBlockByHash(hash, false)
+	_, err = s.client.Eth.GetBlockByHash(hash, false)
 	s.Require().Nil(err)
 }
 
@@ -767,7 +767,7 @@ func (s *EthRPCTestSuite) TestEthGetBlockByNumber() {
 		s.paramsEqual(body, `["0x31f86f", true]`)
 	})
 
-	_, err := s.rpc.EthGetBlockByNumber(number, true)
+	_, err := s.client.Eth.GetBlockByNumber(number, true)
 	s.Require().Nil(err)
 
 	httpmock.Reset()
@@ -779,7 +779,7 @@ func (s *EthRPCTestSuite) TestEthGetBlockByNumber() {
 		s.paramsEqual(body, `["0x37f2", false]`)
 	})
 
-	_, err = s.rpc.EthGetBlockByNumber(number, false)
+	_, err = s.client.Eth.GetBlockByNumber(number, false)
 	s.Require().Nil(err)
 }
 
@@ -789,7 +789,7 @@ func (s *EthRPCTestSuite) TestEthCall() {
 		s.paramsEqual(body, `[{"from":"0x111","to":"0x222"}, "ttt"]`)
 	})
 
-	result, err := s.rpc.EthCall(T{
+	result, err := s.client.Eth.Call(T{
 		From: "0x111",
 		To:   "0x222",
 	}, "ttt")
@@ -799,7 +799,7 @@ func (s *EthRPCTestSuite) TestEthCall() {
 
 func (s *EthRPCTestSuite) TestEthEstimateGas() {
 	s.registerResponseError(errors.New("error"))
-	result, err := s.rpc.EthEstimateGas(T{
+	result, err := s.client.Eth.EstimateGas(T{
 		From: "0x111",
 		To:   "0x222",
 	})
@@ -809,7 +809,7 @@ func (s *EthRPCTestSuite) TestEthEstimateGas() {
 		s.methodEqual(body, "eth_estimateGas")
 		s.paramsEqual(body, `[{"from":"0x111","to":"0x222"}]`)
 	})
-	result, err = s.rpc.EthEstimateGas(T{
+	result, err = s.client.Eth.EstimateGas(T{
 		From: "0x111",
 		To:   "0x222",
 	})
@@ -820,7 +820,7 @@ func (s *EthRPCTestSuite) TestEthEstimateGas() {
 func (s *EthRPCTestSuite) TestEthGetTransactionReceipt() {
 	hash := "0x9c17afa5336d3cfd47e2e795520959b92e627e123e538fd4d5d7ece9025a8dce"
 	s.registerResponseError(errors.New("error"))
-	receipt, err := s.rpc.EthGetTransactionReceipt(hash)
+	receipt, err := s.client.Eth.GetTransactionReceipt(hash)
 	s.Require().NotNil(err)
 
 	result := `{
@@ -851,7 +851,7 @@ func (s *EthRPCTestSuite) TestEthGetTransactionReceipt() {
 		s.paramsEqual(body, `["0x9c17afa5336d3cfd47e2e795520959b92e627e123e538fd4d5d7ece9025a8dce"]`)
 	})
 
-	receipt, err = s.rpc.EthGetTransactionReceipt(hash)
+	receipt, err = s.client.Eth.GetTransactionReceipt(hash)
 	s.Require().Nil(err)
 	s.Require().NotNil(receipt)
 	s.Require().Equal(hash, receipt.TransactionHash)
@@ -896,7 +896,7 @@ func (s *EthRPCTestSuite) TestGetTransaction() {
 		s.methodEqual(body, "ggg")
 	})
 
-	transaction, err := s.rpc.getTransaction("ggg")
+	transaction, err := s.client.Eth.getTransaction("ggg")
 	s.Require().Nil(err)
 	s.Require().NotNil(transaction)
 	s.Require().Equal("0x3068bb24a6c65a80eb350b89b2ef2f4d0605f59e5d07fd3467eb76511c4408e7", transaction.Hash)
@@ -918,7 +918,7 @@ func (s *EthRPCTestSuite) TestEthGetTransactionByHash() {
 		s.paramsEqual(body, `["0x123"]`)
 	})
 
-	t, err := s.rpc.EthGetTransactionByHash("0x123")
+	t, err := s.client.Eth.GetTransactionByHash("0x123")
 	s.Require().Nil(err)
 	s.Require().NotNil(t)
 }
@@ -929,7 +929,7 @@ func (s *EthRPCTestSuite) TestEthGetTransactionByBlockHashAndIndex() {
 		s.paramsEqual(body, `["0x623", "0x12"]`)
 	})
 
-	t, err := s.rpc.EthGetTransactionByBlockHashAndIndex("0x623", 18)
+	t, err := s.client.Eth.GetTransactionByBlockHashAndIndex("0x623", 18)
 	s.Require().Nil(err)
 	s.Require().NotNil(t)
 }
@@ -940,7 +940,7 @@ func (s *EthRPCTestSuite) TestEthGetTransactionByBlockNumberAndIndex() {
 		s.paramsEqual(body, `["0x1f537da", "0xa"]`)
 	})
 
-	t, err := s.rpc.EthGetTransactionByBlockNumberAndIndex(32847834, 10)
+	t, err := s.client.Eth.GetTransactionByBlockNumberAndIndex(32847834, 10)
 	s.Require().Nil(err)
 	s.Require().NotNil(t)
 }
@@ -954,7 +954,7 @@ func (s *EthRPCTestSuite) TestEthNewFilterWithAddress() {
 		s.paramsEqual(body, fmt.Sprintf(`[{"address": ["%s"]}]`, address[0]))
 	})
 
-	filterID, err := s.rpc.EthNewFilter(filterData)
+	filterID, err := s.client.Eth.NewFilter(filterData)
 	s.Require().Nil(err)
 	s.Require().Equal(result, filterID)
 }
@@ -973,7 +973,7 @@ func (s *EthRPCTestSuite) TestEthNewFilterWithTopics() {
 		s.paramsEqual(body, fmt.Sprintf(`[{"topics": [["%s", "%s"]]}]`, topics[0][0], topics[0][1]))
 	})
 
-	filterID, err := s.rpc.EthNewFilter(filterData)
+	filterID, err := s.client.Eth.NewFilter(filterData)
 	s.Require().Nil(err)
 	s.Require().Equal(result, filterID)
 }
@@ -991,7 +991,7 @@ func (s *EthRPCTestSuite) TestEthNewFilterWithAddressAndTopics() {
 		s.paramsEqual(body, fmt.Sprintf(`[{"address": ["%s"], "topics": [["%s"], ["%s"]]}]`, address[0], topics[0][0], topics[1][0]))
 	})
 
-	filterID, err := s.rpc.EthNewFilter(filterData)
+	filterID, err := s.client.Eth.NewFilter(filterData)
 	s.Require().Nil(err)
 	s.Require().Equal(result, filterID)
 }
@@ -1002,7 +1002,7 @@ func (s *EthRPCTestSuite) TestEthNewBlockFilter() {
 		s.methodEqual(body, "eth_newBlockFilter")
 	})
 
-	filterID, err := s.rpc.EthNewBlockFilter()
+	filterID, err := s.client.Eth.NewBlockFilter()
 	s.Require().Nil(err)
 	s.Require().Equal(result, filterID)
 }
@@ -1013,7 +1013,7 @@ func (s *EthRPCTestSuite) TestEthNewPendingTransactionFilter() {
 		s.methodEqual(body, "eth_newPendingTransactionFilter")
 	})
 
-	filterID, err := s.rpc.EthNewPendingTransactionFilter()
+	filterID, err := s.client.Eth.NewPendingTransactionFilter()
 	s.Require().Nil(err)
 	s.Require().Equal(result, filterID)
 }
@@ -1034,7 +1034,7 @@ func (s *EthRPCTestSuite) TestEthGetFilterChanges() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s"]`, filterID))
 	})
 
-	logs, err := s.rpc.EthGetFilterChanges(filterID)
+	logs, err := s.client.Eth.GetFilterChanges(filterID)
 	s.Require().Nil(err)
 	s.Require().Equal([]Log{
 		{
@@ -1065,7 +1065,7 @@ func (s *EthRPCTestSuite) TestEthGetFilterLogs() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s"]`, filterID))
 	})
 
-	logs, err := s.rpc.EthGetFilterLogs(filterID)
+	logs, err := s.client.Eth.GetFilterLogs(filterID)
 	s.Require().Nil(err)
 	s.Require().Equal([]Log{
 		{
@@ -1109,7 +1109,7 @@ func (s *EthRPCTestSuite) TestEthGetLogs() {
 		}]`))
 	})
 
-	logs, err := s.rpc.EthGetLogs(params)
+	logs, err := s.client.Eth.GetLogs(params)
 	s.Require().Nil(err)
 	s.Require().Equal([]Log{
 		{
@@ -1132,7 +1132,7 @@ func (s *EthRPCTestSuite) TestEthUninstallFilter() {
 		s.paramsEqual(body, fmt.Sprintf(`["%s"]`, filterID))
 	})
 
-	uninstall, err := s.rpc.EthUninstallFilter(filterID)
+	uninstall, err := s.client.Eth.UninstallFilter(filterID)
 	s.Require().Nil(err)
 	boolRes, _ := strconv.ParseBool(result)
 	s.Require().Equal(boolRes, uninstall)
@@ -1152,7 +1152,7 @@ func TestEthError(t *testing.T) {
 }
 
 func TestEth1(t *testing.T) {
-	client := NewEthRPC("")
+	client := NewClient("")
 	require.Equal(t, int64(1000000000000000000), Eth1().Int64())
 	require.Equal(t, int64(1000000000000000000), client.Eth1().Int64())
 }
